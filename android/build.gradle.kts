@@ -26,6 +26,15 @@ tasks.register<Delete>("clean") {
 
 // --- DÉBUT DU PATCH ---
 subprojects {
+    // --- DÉBUT DU CORRECTIF VERSIONS (Syntaxe Kotlin) ---
+    project.configurations.all {
+        resolutionStrategy {
+            force("androidx.browser:browser:1.8.0")
+            force("androidx.core:core-ktx:1.15.0")
+            force("androidx.core:core:1.15.0")
+        }
+    }
+    // --- FIN DU CORRECTIF VERSIONS ---
     val project = this
     // On définit des propriétés globales que certains plugins lisent parfois
     project.extensions.extraProperties.set("compileSdkVersion", 34)

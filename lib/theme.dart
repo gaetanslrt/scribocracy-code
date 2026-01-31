@@ -1,96 +1,91 @@
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 
 class AppTheme {
-  // Palette Cyberpunk 2270
-  static const Color voidBlack = Color(0xFF050505);
-  static const Color carbon = Color(0xFF141414);
-  static const Color neonCyan = Color(0xFF00F3FF);
-  static const Color dangerRed = Color(0xFFFF0055);
-  static const Color holoWhite = Color(0xDDFFFFFF);
+  // --- PALETTE IDENTITÉ VISUELLE ---
+  
+  // Fond principal : Luster White (Papier chaud)
+  static const Color lusterWhite = Color(0xFFF4F1EC); 
+  
+  // Accents doux : Aster Flower Blue
+  static const Color asterBlue = Color(0xFF9BACD8);
+  
+  // Action / Highlight : Habañero (Orange vif)
+  static const Color habanero = Color(0xFFF98513);
+  
+  // Textes (On garde un noir doux pour le contraste sur le blanc crème)
+  static const Color darkText = Color(0xFF1A1A1A);
+  static const Color greyText = Color(0xFF6E6E73);
 
-  static ThemeData get cyberpunkTheme {
+  // --- CONFIGURATION THÈME ---
+
+  static ThemeData get modernGlassTheme {
     return ThemeData(
       useMaterial3: true,
-      brightness: Brightness.dark,
-      scaffoldBackgroundColor: voidBlack,
-      primaryColor: neonCyan,
+      brightness: Brightness.light,
+      scaffoldBackgroundColor: lusterWhite, // Le fond crème
+      primaryColor: asterBlue,
       
-      colorScheme: const ColorScheme.dark(
-        primary: neonCyan,
-        secondary: dangerRed,
-        surface: carbon,
-        background: voidBlack,
-        error: dangerRed,
+      colorScheme: const ColorScheme.light(
+        primary: asterBlue,
+        secondary: habanero,
+        surface: lusterWhite,
+        onSurface: darkText,
+        background: lusterWhite,
       ),
-
-      // Typographie locale (Offline)
-      textTheme: const TextTheme(
-        // Titres : Orbitron
-        displayLarge: TextStyle(
-          fontFamily: 'Orbitron', 
-          fontSize: 30, 
-          fontWeight: FontWeight.bold, 
-          color: neonCyan, 
-          letterSpacing: 2.0
+      
+      // --- TYPOGRAPHIE ---
+      textTheme: TextTheme(
+        // TITRES : Playfair Display (Élégant, Sérif)
+        displayLarge: GoogleFonts.playfairDisplay(
+          fontSize: 32, 
+          fontWeight: FontWeight.w700, 
+          color: darkText,
+          letterSpacing: -0.5
         ),
-        displayMedium: TextStyle(
-          fontFamily: 'Orbitron', 
-          fontSize: 22, 
-          fontWeight: FontWeight.w600, 
-          color: Colors.white
-        ),
-        labelLarge: TextStyle(
-          fontFamily: 'Orbitron', 
-          fontSize: 14, 
-          fontWeight: FontWeight.bold
+        headlineSmall: GoogleFonts.playfairDisplay(
+          fontSize: 20,
+          fontWeight: FontWeight.w600,
+          color: darkText
         ),
         
-        // Sous-titres : Orbitron (On remplace Rajdhani si vous ne l'avez pas téléchargé)
-        headlineSmall: TextStyle(
-          fontFamily: 'Orbitron', 
-          fontSize: 18, 
-          fontWeight: FontWeight.bold, 
-          color: holoWhite
-        ),
-        
-        // Corps de texte : Share Tech Mono
-        bodyLarge: TextStyle(
-          fontFamily: 'ShareTechMono', 
+        // CORPS DE TEXTE : Montserrat (Moderne, Sans-Sérif)
+        bodyLarge: GoogleFonts.montserrat(
           fontSize: 16, 
-          color: holoWhite, 
-          height: 1.4
+          height: 1.5, 
+          color: darkText, 
+          fontWeight: FontWeight.w500
         ),
-        bodyMedium: TextStyle(
-          fontFamily: 'ShareTechMono', 
+        bodyMedium: GoogleFonts.montserrat(
           fontSize: 14, 
-          color: Colors.grey
+          color: greyText,
+          fontWeight: FontWeight.w500
+        ),
+        titleMedium: GoogleFonts.montserrat( // Pour les champs de texte
+          fontSize: 16,
+          color: darkText,
+          fontWeight: FontWeight.w600
         ),
       ),
 
-      // Input : Style Terminal
+      // Styles globaux
+      appBarTheme: AppBarTheme(
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        centerTitle: true,
+        scrolledUnderElevation: 0,
+        iconTheme: const IconThemeData(color: darkText),
+        titleTextStyle: GoogleFonts.playfairDisplay(
+          fontSize: 20, fontWeight: FontWeight.w700, color: darkText
+        )
+      ),
+      
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
-        fillColor: carbon,
-        border: const OutlineInputBorder(
-           borderRadius: BorderRadius.zero,
-           borderSide: BorderSide(color: Colors.grey, width: 0.5),
-        ),
-        enabledBorder: const OutlineInputBorder(
-           borderRadius: BorderRadius.zero,
-           borderSide: BorderSide(color: Colors.grey, width: 0.5),
-        ),
-        focusedBorder: const OutlineInputBorder(
-           borderRadius: BorderRadius.zero,
-           borderSide: BorderSide(color: neonCyan, width: 1.5),
-        ),
-        // Le hint text prend aussi le style code
-        hintStyle: TextStyle(fontFamily: 'ShareTechMono', color: Colors.grey[700]),
-      ),
-
-      floatingActionButtonTheme: const FloatingActionButtonThemeData(
-        backgroundColor: neonCyan,
-        foregroundColor: Colors.black,
-        shape: BeveledRectangleBorder(borderRadius: BorderRadius.all(Radius.circular(10))),
+        fillColor: Colors.white.withOpacity(0.5),
+        hintStyle: GoogleFonts.montserrat(color: Colors.black38),
+        contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
       ),
     );
   }
