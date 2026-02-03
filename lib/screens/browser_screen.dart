@@ -4,7 +4,7 @@ import 'package:webview_flutter/webview_flutter.dart';
 import 'dart:ui' show ImageFilter;
 import 'package:scribocracy_new/theme.dart';
 import 'package:scribocracy_new/widgets/glass_container.dart';
-import 'package:scribocracy_new/widgets/background_scaffold.dart';
+// import 'package:scribocracy_new/widgets/background_scaffold.dart'; // Non utilisé ici
 import 'package:scribocracy_new/screens/chat_screen.dart';
 import 'package:scribocracy_new/providers.dart';
 import 'package:scribocracy_new/models/web_page.dart';
@@ -18,6 +18,7 @@ import 'package:scribocracy_new/services/ad_block_service.dart';
 import 'package:scribocracy_new/services/download_service.dart';
 import 'package:flutter/services.dart'; // Pour HapticFeedback
 import 'package:url_launcher/url_launcher.dart';
+import 'package:scribocracy_new/services/dark_mode_service.dart';
 
 class BrowserScreen extends ConsumerStatefulWidget {
   const BrowserScreen({super.key});
@@ -36,20 +37,14 @@ class _BrowserScreenState extends ConsumerState<BrowserScreen> {
   bool _isSearchMode = false;
   bool _isMenuOpen = false;
   bool _isTabSwitcherOpen = false;
-
-  bool _isDownloadMenuOpen = false; // Empêche l'ouverture multiple
-
-  bool _isBottomBarHidden = false; // Pour cacher la barre au scroll
+  bool _isDownloadMenuOpen = false;
+  bool _isBottomBarHidden = false;
 
   // DONNÉES LIVE
   Map<String, dynamic>? _weatherData;
   bool _isCurrentPageFavorite = false;
 
   bool get _anyOverlayOpen => _isMenuOpen || _isTabSwitcherOpen;
-
-      // NOUVEAU GETTER : Pilote uniquement l'animation de recul
-  // On ne recule que pour le Menu ou les Onglets. PAS pour la Recherche.
-  bool get _shouldRecoil => _isMenuOpen || _isTabSwitcherOpen;
 
   // Éléments UI Globaux
   final TextEditingController _urlController = TextEditingController();
@@ -71,47 +66,82 @@ class _BrowserScreenState extends ConsumerState<BrowserScreen> {
     });
   }
 
-void _showDownloadOption(String imageUrl) {
-    // SÉCURITÉ : Si déjà ouvert, on ignore les appels suivants
+  // Helper pour savoir si on est sur un moteur de recherche
+  bool _isSearchEngine(String url) {
+    if (url.isEmpty) return false;
+    return url.contains('google.') ||
+        url.contains('bing.com') ||
+        url.contains('duckduckgo.com');
+  }
+
+  // --- LOGIQUE TÉLÉCHARGEMENT ---
+  void _showDownloadOption(String imageUrl) {
     if (_isDownloadMenuOpen) return;
-    
-    setState(() => _isDownloadMenuOpen = true); // On verrouille
-    
+    setState(() => _isDownloadMenuOpen = true);
     HapticFeedback.mediumImpact();
-    
+
+    // On récupère le thème actuel pour le menu contextuel
+    final isDark = ref.read(darkModeProvider);
+
     showModalBottomSheet(
       context: context,
       backgroundColor: Colors.transparent,
-      isScrollControlled: true, // Pour que le clavier ne cache pas le menu si besoin
+      isScrollControlled: true,
       builder: (ctx) => GlassContainer(
-        blur: 20,
-        opacity: 0.8,
+        blur: 10,
+        opacity: 0.6,
+        // Adaptation du fond du menu contextuel
+        color: isDark ? AppTheme.darkSurface : AppTheme.lightSurface,
         borderRadius: const BorderRadius.vertical(top: Radius.circular(30)),
         child: Padding(
           padding: const EdgeInsets.all(30),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              // Aperçu de l'image
               Container(
-                height: 150, // Un peu plus grand pour bien voir
+                height: 150,
                 constraints: const BoxConstraints(maxWidth: 200),
                 decoration: BoxDecoration(
                   borderRadius: BorderRadius.circular(15),
-                  image: DecorationImage(image: NetworkImage(imageUrl), fit: BoxFit.cover),
-                  border: Border.all(color: Colors.white, width: 2),
-                  boxShadow: [BoxShadow(color: Colors.black26, blurRadius: 10, offset: Offset(0,5))]
+                  image: DecorationImage(
+                    image: NetworkImage(imageUrl),
+                    fit: BoxFit.cover,
+                  ),
+                  border: Border.all(
+                    color: isDark ? AppTheme.darkBorder : Colors.white,
+                    width: 2,
+                  ),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black26,
+                      blurRadius: 10,
+                      offset: Offset(0, 5),
+                    ),
+                  ],
                 ),
               ),
               const SizedBox(height: 20),
-              const Text("Enregistrer cette image ?", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, fontFamily: 'Playfair Display')),
+              Text(
+                "Enregistrer cette image ?",
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                  fontFamily: 'Playfair Display',
+                  color: isDark
+                      ? AppTheme.darkTextPrimary
+                      : AppTheme.lightTextPrimary,
+                ),
+              ),
               const SizedBox(height: 30),
               Row(
                 children: [
                   Expanded(
                     child: TextButton(
                       onPressed: () => Navigator.pop(ctx),
-                      child: const Text("Annuler", style: TextStyle(color: AppTheme.greyText)),
+                      child: const Text(
+                        "Annuler",
+                        style: TextStyle(color: AppTheme.greyText),
+                      ),
                     ),
                   ),
                   Expanded(
@@ -120,24 +150,30 @@ void _showDownloadOption(String imageUrl) {
                         backgroundColor: AppTheme.habanero,
                         foregroundColor: Colors.white,
                         elevation: 0,
-                        shape: const StadiumBorder()
+                        shape: const StadiumBorder(),
                       ),
                       onPressed: () async {
-                        Navigator.pop(ctx); 
-                        
+                        Navigator.pop(ctx);
                         ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(content: Text("Téléchargement en cours..."), duration: Duration(milliseconds: 1000))
+                          const SnackBar(
+                            content: Text("Téléchargement en cours..."),
+                            duration: Duration(milliseconds: 1000),
+                          ),
                         );
-                        
-                        // Note: Assurez-vous d'avoir bien importé DownloadService
-                        bool success = await DownloadService().downloadImageToGallery(imageUrl);
-                        
+                        bool success = await DownloadService()
+                            .downloadImageToGallery(imageUrl);
                         if (mounted) {
                           ScaffoldMessenger.of(context).showSnackBar(
                             SnackBar(
-                              content: Text(success ? "Image enregistrée !" : "Erreur téléchargement"),
-                              backgroundColor: success ? Colors.green : Colors.redAccent,
-                            )
+                              content: Text(
+                                success
+                                    ? "Image enregistrée !"
+                                    : "Erreur téléchargement",
+                              ),
+                              backgroundColor: success
+                                  ? Colors.green
+                                  : Colors.redAccent,
+                            ),
                           );
                         }
                       },
@@ -145,114 +181,157 @@ void _showDownloadOption(String imageUrl) {
                     ),
                   ),
                 ],
-              )
+              ),
             ],
           ),
         ),
       ),
     ).whenComplete(() {
-      // DÉVERROUILLAGE : Quand le menu se ferme (par clic ou retour arrière), on libère le verrou
       setState(() => _isDownloadMenuOpen = false);
     });
   }
-  // --- LOGIQUE ONGLETS ---
 
+  // --- LOGIQUE ONGLETS ---
   void _addNewTab() {
     final newController = WebViewController()
       ..setJavaScriptMode(JavaScriptMode.unrestricted)
       ..setBackgroundColor(const Color(0x00000000))
-      
-      // A. CANAUX DE COMMUNICATION (JS -> Flutter)
       ..addJavaScriptChannel(
-        'ImageDownloader', // Votre gestionnaire d'images existant
+        'ImageDownloader',
         onMessageReceived: (message) => _showDownloadOption(message.message),
       )
       ..addJavaScriptChannel(
-        'ScrollListener', // NOUVEAU : Pour détecter le scroll
+        'ImageDownloader',
+        onMessageReceived: (message) => _showDownloadOption(message.message),
+      )
+      ..addJavaScriptChannel(
+        'ScrollListener',
         onMessageReceived: (message) {
+          // 1. VÉRIFICATION MOTEUR DE RECHERCHE
+          // Si on est sur Google/Bing/DDG, on force la barre visible et on arrête là.
+          if (_isSearchEngine(_tabs[_currentTabIndex].url)) {
+            if (_isBottomBarHidden) {
+              setState(() => _isBottomBarHidden = false);
+            }
+            return;
+          }
+
+          // 2. LOGIQUE DE SCROLL NORMALE
           final direction = message.message;
           if (direction == 'down' && !_isBottomBarHidden) {
-            setState(() => _isBottomBarHidden = true); // On cache en descendant
+            setState(() => _isBottomBarHidden = true);
           } else if (direction == 'up' && _isBottomBarHidden) {
-            setState(() => _isBottomBarHidden = false); // On montre en montant
+            setState(() => _isBottomBarHidden = false);
           }
         },
       )
-      
-      // B. NAVIGATION DELEGATE (Redirections)
       ..setNavigationDelegate(
         NavigationDelegate(
-          // NOUVEAU : Interception des liens spéciaux (Apps, Store, Tel, Mail)
-          // NOUVEAU : Interception des liens spéciaux (Apps, Store, Tel, Mail)
           onNavigationRequest: (NavigationRequest request) async {
             final url = request.url;
-            
-            // Si c'est du web classique, on laisse passer
-            if (url.startsWith('http://') || url.startsWith('https://')) {
-              return NavigationDecision.navigate;
-            }
-
-            // Sinon (intent://, tel:, mailto:, market://...), on essaie d'ouvrir l'app externe
-            try {
-              final uri = Uri.parse(url);
-              
-              // CORRECTION : L'import a été retiré d'ici car il est déjà en haut du fichier
-              
+            final uri = Uri.parse(url);
+            if (url.toLowerCase().endsWith('.pdf')) {
               if (await canLaunchUrl(uri)) {
                 await launchUrl(uri, mode: LaunchMode.externalApplication);
-                return NavigationDecision.prevent; // On bloque la navigation dans la WebView
+                return NavigationDecision.prevent;
               }
-            } catch (e) {
-              debugPrint("Erreur ouverture app externe: $e");
             }
-            
-            // Si on ne sait pas quoi faire, on bloque pour éviter l'écran d'erreur rouge
-            return NavigationDecision.prevent;
+            if (!url.startsWith('http://') && !url.startsWith('https://')) {
+              try {
+                if (await canLaunchUrl(uri)) {
+                  await launchUrl(uri, mode: LaunchMode.externalApplication);
+                  return NavigationDecision.prevent;
+                }
+              } catch (e) {
+                debugPrint("Erreur lien externe: $e");
+              }
+              return NavigationDecision.prevent;
+            }
+            return NavigationDecision.navigate;
           },
-
           onPageStarted: (String url) {
-             _updateCurrentTab((tab) { tab.isLoading = true; if (url != 'about:blank') tab.url = url; });
-             if (!_isTabSwitcherOpen) {
-               setState(() { if (url != 'about:blank') _urlController.text = url; });
-               _checkFavoriteStatus(url);
-             }
+            _updateCurrentTab((tab) {
+              tab.isLoading = true;
+              if (url != 'about:blank') tab.url = url;
+            });
+            if (_isSearchEngine(url) && _isBottomBarHidden) {
+              setState(() => _isBottomBarHidden = false);
+            }
+            if (!_isTabSwitcherOpen) {
+              setState(() {
+                if (url != 'about:blank') _urlController.text = url;
+              });
+              _checkFavoriteStatus(url);
+            }
           },
           onPageFinished: (String url) async {
-             // 1. Injections existantes (AdBlock + Image Detector)
-             _tabs[_currentTabIndex].controller.runJavaScript(AdBlockService.blockerScript);
-             // ... (Votre script imageDetector avec le Timer ici) ...
-             
-             // 2. NOUVEAU : Injection du Détecteur de Scroll
-             // Ce script compare la position actuelle avec la précédente pour savoir si on monte ou descend
-             const scrollScript = """
+            final isDark = ref.read(darkModeProvider);
+            if (isDark) {
+              _tabs[_currentTabIndex].controller.runJavaScript(
+                DarkModeService.darkThemeScript,
+              );
+            }
+            _tabs[_currentTabIndex].controller.runJavaScript(
+              AdBlockService.blockerScript,
+            );
+
+            // --- NOUVEAU SCRIPT DE SCROLL INTELLIGENT ---
+            // Il introduit une tolérance : il faut remonter de 150px pour déclencher le 'up'
+            const scrollScript = """
                 var lastScrollTop = 0;
+                var upScrollStart = 0; // Point de départ de la remontée
+                
                 window.addEventListener("scroll", function() {
                    var st = window.pageYOffset || document.documentElement.scrollTop;
-                   if (st > lastScrollTop && st > 100){
-                       ScrollListener.postMessage('down'); // On descend
-                   } else {
-                       ScrollListener.postMessage('up'); // On monte
+                   
+                   // A. SCROLL VERS LE BAS
+                   if (st > lastScrollTop) {
+                       upScrollStart = st; // On reset le compteur de montée
+                       // On cache dès qu'on descend un peu (plus de 50px)
+                       if (st > 50) { 
+                           ScrollListener.postMessage('down');
+                       }
+                   } 
+                   // B. SCROLL VERS LE HAUT
+                   else {
+                       // On ne déclenche 'up' QUE si on a remonté de plus de 150px
+                       // par rapport au point le plus bas atteint (upScrollStart)
+                       if (upScrollStart - st > 150) {
+                           ScrollListener.postMessage('up');
+                       }
                    }
                    lastScrollTop = st <= 0 ? 0 : st;
                 }, false);
              """;
-             _tabs[_currentTabIndex].controller.runJavaScript(scrollScript);
+            _tabs[_currentTabIndex].controller.runJavaScript(scrollScript);
 
-             // ... Fin du chargement ...
-             String? title; 
-             try { title = await _tabs[_currentTabIndex].controller.getTitle(); } catch(e){}
-             _updateCurrentTab((tab) { tab.isLoading = false; tab.title = title ?? "Onglet"; });
-             if (url.startsWith('http')) { 
-               await ref.read(databaseProvider).recordVisit(url, title ?? ""); 
-               _refreshDashboard(); 
-             }
+            String? title;
+            try {
+              title = await _tabs[_currentTabIndex].controller.getTitle();
+            } catch (e) {}
+            _updateCurrentTab((tab) {
+              tab.isLoading = false;
+              tab.title = title ?? "Onglet";
+            });
+            if (url.startsWith('http')) {
+              await ref.read(databaseProvider).recordVisit(url, title ?? "");
+              _refreshDashboard();
+            }
           },
         ),
-      ); 
+      );
 
-    // ... Création du Tab (inchangé) ...
-    final newTab = BrowserTab(id: DateTime.now().toString(), controller: newController);
-    setState(() { _tabs.add(newTab); _currentTabIndex = _tabs.length - 1; _showDashboard = true; _isTabSwitcherOpen = false; _urlController.clear(); });
+    final newTab = BrowserTab(
+      id: DateTime.now().toString(),
+      controller: newController,
+    );
+    setState(() {
+      _tabs.add(newTab);
+      _currentTabIndex = _tabs.length - 1;
+      _showDashboard = true;
+      _isTabSwitcherOpen = false;
+      _urlController.clear();
+    });
   }
 
   void _closeTab(int index) {
@@ -287,22 +366,17 @@ void _showDownloadOption(String imageUrl) {
   }
 
   void _updateCurrentTab(Function(BrowserTab) updateFn) {
-    if (mounted)
-      setState(() {
-        updateFn(_tabs[_currentTabIndex]);
-      });
+    if (mounted) setState(() => updateFn(_tabs[_currentTabIndex]));
   }
 
   WebViewController get _activeController => _tabs[_currentTabIndex].controller;
 
   // --- LOGIQUE METIER ---
-
   void _loadUrlOrSearch(String input) {
     if (input.isEmpty) {
       _closeSearchMode();
       return;
     }
-
     setState(() {
       _showDashboard = false;
       _isSearchMode = false;
@@ -319,10 +393,8 @@ void _showDownloadOption(String imageUrl) {
       if (input.contains('.') && !input.contains(' ')) {
         _activeController.loadRequest(Uri.parse('https://$input'));
       } else {
-        // LOGIQUE DE MOTEUR DE RECHERCHE DYNAMIQUE
-        final engine = ref.read(searchEngineProvider); // On lit la préférence
+        final engine = ref.read(searchEngineProvider);
         final query = Uri.encodeComponent(input);
-
         String searchUrl;
         switch (engine) {
           case 'ddg':
@@ -336,7 +408,6 @@ void _showDownloadOption(String imageUrl) {
             searchUrl = 'https://www.google.com/search?q=$query';
             break;
         }
-
         _activeController.loadRequest(Uri.parse(searchUrl));
       }
     } else {
@@ -345,8 +416,17 @@ void _showDownloadOption(String imageUrl) {
   }
 
   Future<void> _refreshDashboard() async {
-    final links = await ref.read(databaseProvider).getDashboardLinks();
-    if (mounted) setState(() => _dashboardLinks = links);
+    // CORRECTION : On ne charge que les favoris, pas l'historique complet
+    // Assurez-vous que votre databaseService a bien une méthode getFavorites()
+    // (C'est celle utilisée par votre écran FavoritesScreen)
+    final links = await ref.read(databaseProvider).getFavorites();
+
+    if (mounted) {
+      setState(() {
+        // On stocke les favoris dans la variable du dashboard
+        _dashboardLinks = links;
+      });
+    }
   }
 
   Future<void> _checkFavoriteStatus(String url) async {
@@ -361,7 +441,6 @@ void _showDownloadOption(String imageUrl) {
   Future<void> _toggleFavorite() async {
     final url = _tabs[_currentTabIndex].url;
     if (url.isEmpty || !url.startsWith('http')) return;
-
     await ref.read(databaseProvider).toggleFavorite(url);
     await _checkFavoriteStatus(url);
     await _refreshDashboard();
@@ -376,7 +455,7 @@ void _showDownloadOption(String imageUrl) {
     setState(() => _suggestions = results);
   }
 
-  // --- READER MODE ---
+  // --- READER MODE & AI ---
   Future<void> _openReaderMode() async {
     if (_tabs[_currentTabIndex].url.isEmpty) return;
     try {
@@ -423,7 +502,35 @@ void _showDownloadOption(String imageUrl) {
     }
   }
 
-  // --- HELPERS ---
+  Future<String> _getPageContent() async {
+    if (_showDashboard) return "";
+    try {
+      final Object result = await _activeController
+          .runJavaScriptReturningResult("document.body.innerText");
+      String pageContent = result.toString();
+      if (pageContent.startsWith('"') && pageContent.endsWith('"'))
+        pageContent = pageContent.substring(1, pageContent.length - 1);
+      pageContent = pageContent.replaceAll('\\n', '\n').replaceAll('\\t', ' ');
+      if (pageContent.length > 300000)
+        pageContent = pageContent.substring(0, 300000);
+      return "TITRE: ${_tabs[_currentTabIndex].title}\nURL: ${_urlController.text}\nCONTENU:\n$pageContent";
+    } catch (e) {
+      return "";
+    }
+  }
+
+  void _launchAIChat(String content, String? initialPrompt) {
+    setState(() => _isMenuOpen = false);
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) =>
+            ChatScreen(systemContext: content, initialInput: initialPrompt),
+      ),
+    );
+  }
+
+  // --- HELPERS VISUELS ---
   String _getFaviconUrl(String url) {
     if (url.isEmpty) return "";
     try {
@@ -434,15 +541,6 @@ void _showDownloadOption(String imageUrl) {
       return "";
     }
   }
-
-  IconData _getIconForUrl(String url) {
-    if (url.contains('google')) return Icons.search;
-    if (url.contains('youtube')) return Icons.play_arrow_rounded;
-    return Icons.public;
-  }
-
-  Color _getColorForUrl(String url) =>
-      url.contains('youtube') ? Colors.redAccent : AppTheme.asterBlue;
 
   // --- CONTROLES UI ---
   void _openSearchMode() {
@@ -481,42 +579,37 @@ void _showDownloadOption(String imageUrl) {
     });
   }
 
-  Future<String> _getPageContent() async {
-    if (_showDashboard) return "";
-    try {
-      final Object result = await _activeController
-          .runJavaScriptReturningResult("document.body.innerText");
-      String pageContent = result.toString();
-      if (pageContent.startsWith('"') && pageContent.endsWith('"'))
-        pageContent = pageContent.substring(1, pageContent.length - 1);
-      pageContent = pageContent.replaceAll('\\n', '\n').replaceAll('\\t', ' ');
-      if (pageContent.length > 300000)
-        pageContent = pageContent.substring(0, 300000);
-      return "TITRE: ${_tabs[_currentTabIndex].title}\nURL: ${_urlController.text}\nCONTENU:\n$pageContent";
-    } catch (e) {
-      return "";
-    }
-  }
-
-  void _launchAIChat(String content, String? initialPrompt) {
-    setState(() => _isMenuOpen = false);
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (_) =>
-            ChatScreen(systemContext: content, initialInput: initialPrompt),
-      ),
-    );
-  }
+  // =========================================================================
+  // ========================== MÉTHODE BUILD ================================
+  // =========================================================================
 
   @override
   Widget build(BuildContext context) {
+    // 1. Récupération du thème
+    final isDark = ref.watch(darkModeProvider);
+
+    // 2. Définition des couleurs DYNAMIQUES
+    final Color appBackground = isDark
+        ? AppTheme.darkBackground
+        : AppTheme.lightBackground;
+    final Color pageBackground = isDark
+        ? AppTheme.darkSurface
+        : AppTheme.lightBackground;
+
+    ref.listen(darkModeProvider, (previous, next) {
+      if (next) {
+        _activeController.runJavaScript(DarkModeService.darkThemeScript);
+      } else {
+        _activeController.runJavaScript(DarkModeService.removeDarkThemeScript);
+      }
+    });
+
     return Scaffold(
-      backgroundColor: Colors.black,
+      backgroundColor: appBackground,
       resizeToAvoidBottomInset: false,
       body: Stack(
         children: [
-          // 1. CONTENU
+          // 1. CONTENU PRINCIPAL (RESTORED & FIXED)
           AnimatedScale(
             scale: _anyOverlayOpen ? 0.92 : 1.0,
             duration: const Duration(milliseconds: 200),
@@ -525,7 +618,7 @@ void _showDownloadOption(String imageUrl) {
               duration: const Duration(milliseconds: 200),
               curve: Curves.easeOutQuart,
               decoration: BoxDecoration(
-                color: AppTheme.lusterWhite,
+                color: pageBackground,
                 borderRadius: BorderRadius.circular(_anyOverlayOpen ? 24 : 0),
               ),
               clipBehavior: Clip.antiAlias,
@@ -535,14 +628,16 @@ void _showDownloadOption(String imageUrl) {
                     child: Column(
                       children: [
                         SizedBox(height: MediaQuery.of(context).padding.top),
+                        // Barre de progression (Loading)
                         if (_tabs[_currentTabIndex].isLoading &&
                             !_showDashboard)
-                          LinearProgressIndicator(
+                          const LinearProgressIndicator(
                             value: null,
-                            color: AppTheme.habanero,
+                            color: AppTheme.primaryBrand,
                             backgroundColor: Colors.transparent,
                             minHeight: 2,
                           ),
+                        // La WebView (Libre de scroller !)
                         Expanded(
                           child: IndexedStack(
                             index: _currentTabIndex,
@@ -557,14 +652,18 @@ void _showDownloadOption(String imageUrl) {
                       ],
                     ),
                   ),
+
+                  // DASHBOARD
                   AnimatedOpacity(
                     opacity: _showDashboard ? 1.0 : 0.0,
                     duration: const Duration(milliseconds: 200),
                     child: IgnorePointer(
                       ignoring: !_showDashboard,
-                      child: _buildDashboard(),
+                      child: _buildDashboard(isDark),
                     ),
                   ),
+
+                  // VOILE DIMMING (Focus)
                   if (_anyOverlayOpen)
                     Positioned.fill(
                       child: GestureDetector(
@@ -576,7 +675,7 @@ void _showDownloadOption(String imageUrl) {
                           });
                           _searchFocusNode.unfocus();
                         },
-                        child: Container(color: Colors.black12),
+                        child: Container(color: Colors.black.withOpacity(0.2)),
                       ),
                     ),
                 ],
@@ -584,30 +683,29 @@ void _showDownloadOption(String imageUrl) {
             ),
           ),
 
-          // --- 2. BARRE DU BAS (ANIMÉE AU SCROLL) ---
+          // 2. BARRE DU BAS (RÉDUITE MAIS VISIBLE)
           AnimatedPositioned(
-            duration: const Duration(milliseconds: 300), 
+            duration: const Duration(milliseconds: 300),
             curve: Curves.easeInOut,
-            left: 0, 
-            right: 0, 
-            // LOGIQUE : 
-            // Si Overlay ouvert (Menu/Search) -> On cache (-100)
-            // Si Scroll vers le bas (_isBottomBarHidden) -> On cache (-100)
-            // Sinon -> On affiche (0)
-            bottom: (_anyOverlayOpen || _isBottomBarHidden) ? -100 : 0, 
-            child: _buildBottomBar(),
+            left: 0,
+            right: 0,
+            // LOGIQUE : On ne cache complètement la barre QUE si un overlay (Menu/Recherche) est ouvert.
+            // Si on scroll (_isBottomBarHidden), elle reste à 0 mais changera de forme.
+            bottom: _anyOverlayOpen ? -150 : 0,
+            child: _buildBottomBar(isDark), // On passe le style
           ),
 
           // 3. OVERLAYS
           _buildAnimatedOverlay(
             isOpen: _isMenuOpen,
-            child: _buildMenuContent(),
+            child: _buildMenuContent(isDark),
           ),
           _buildAnimatedOverlay(
             isOpen: _isTabSwitcherOpen,
-            child: _buildTabSwitcherContent(),
+            child: _buildTabSwitcherContent(isDark),
           ),
-          if (_isSearchMode) Positioned.fill(child: _buildSearchOverlay()),
+          if (_isSearchMode)
+            Positioned.fill(child: _buildSearchOverlay(isDark)),
         ],
       ),
     );
@@ -625,12 +723,24 @@ void _showDownloadOption(String imageUrl) {
     );
   }
 
-  // --- DASHBOARD ---
-  Widget _buildDashboard() {
+  // --- WIDGETS DÉCOUPÉS AVEC THÈME APPLIQUÉ ---
+
+  // --- DASHBOARD (MODIFIÉ : Titre remonté + Grille Favoris) ---
+  Widget _buildDashboard(bool isDark) {
+    final Color textColor = isDark
+        ? AppTheme.darkTextPrimary
+        : AppTheme.lightTextPrimary;
+    final Color bgColor = isDark
+        ? AppTheme.darkSurface
+        : AppTheme.lightBackground;
+
+    final favorites = _dashboardLinks.take(8).toList();
+
     return Container(
-      color: AppTheme.lusterWhite,
+      color: bgColor,
       child: Stack(
         children: [
+          // 1. MÉTÉO
           Positioned(
             top: MediaQuery.of(context).padding.top + 20,
             right: 24,
@@ -641,11 +751,11 @@ void _showDownloadOption(String imageUrl) {
                     children: [
                       Text(
                         "${_weatherData!['temp']}°",
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontFamily: 'Montserrat',
                           fontSize: 42,
                           fontWeight: FontWeight.w300,
-                          color: AppTheme.darkText,
+                          color: textColor,
                           height: 1.0,
                         ),
                       ),
@@ -657,19 +767,75 @@ void _showDownloadOption(String imageUrl) {
                           fontFamily: 'Montserrat',
                           fontSize: 12,
                           fontWeight: FontWeight.w500,
-                          color: Colors.grey,
+                          color: AppTheme.greyText,
                           height: 1.4,
                         ),
                       ),
                     ],
                   ),
           ),
-          Center(
-            child: Text(
-              "Scribocracy",
-              style: Theme.of(context).textTheme.displayLarge?.copyWith(
-                fontSize: 48,
-                color: AppTheme.darkText,
+
+          // 2. CONTENU CENTRAL (SANS REFRESH INDICATOR)
+          Positioned.fill(
+            child: SingleChildScrollView(
+              physics: const BouncingScrollPhysics(),
+              child: Padding(
+                padding: EdgeInsets.only(
+                  top: MediaQuery.of(context).size.height * 0.23,
+                  left: 20,
+                  right: 20,
+                ),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.start,
+                  children: [
+                    // A. LE TITRE
+                    Text(
+                      "Scribocracy",
+                      style: Theme.of(context).textTheme.displayLarge?.copyWith(
+                        fontSize: 48,
+                        color: textColor,
+                        letterSpacing: -1,
+                      ),
+                    ),
+
+                    const SizedBox(height: 40),
+
+                    // B. LA GRILLE (Limitée à 8)
+                    if (favorites.isEmpty)
+                      Column(
+                        children: [
+                          Icon(
+                            Icons.star_outline_rounded,
+                            size: 40,
+                            color: AppTheme.greyText.withOpacity(0.3),
+                          ),
+                          const SizedBox(height: 10),
+                          Text(
+                            "Vos favoris apparaîtront ici",
+                            style: TextStyle(
+                              color: AppTheme.greyText.withOpacity(0.5),
+                              fontSize: 14,
+                            ),
+                          ),
+                        ],
+                      )
+                    else
+                      Wrap(
+                        spacing: 20,
+                        runSpacing: 25,
+                        alignment: WrapAlignment.center,
+                        children: favorites.map((page) {
+                          return _buildDashboardFavoriteItem(
+                            page,
+                            isDark,
+                            textColor,
+                          );
+                        }).toList(),
+                      ),
+
+                    const SizedBox(height: 100),
+                  ],
+                ),
               ),
             ),
           ),
@@ -678,172 +844,338 @@ void _showDownloadOption(String imageUrl) {
     );
   }
 
-  // --- BARRE DU BAS (MODIFIÉE) ---
-  Widget _buildBottomBar() {
-    // On utilise SafeArea pour que la barre flotte au dessus du "Home Indicator"
-    return SafeArea(
-      top: false, // On ne s'occupe que du bas
-      child: Padding(
-        // Marges externes pour l'effet "Volant" (Gauche/Droite/Bas)
-        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-        child: GlassContainer(
-          // On augmente l'arrondi pour le style "Capsule"
-          borderRadius: BorderRadius.circular(26),
-          // Un peu plus de flou pour la lisibilité sans fond opaque
-          blur: 15,
-          opacity: 0.4,
-          borderColor: Colors.black12.withOpacity(0.1), // Bordure plus subtile
-          // Padding interne réduit pour affiner la barre
-          padding: const EdgeInsets.symmetric(vertical: 5, horizontal: 12),
-          child: Row(
-            mainAxisSize:
-                MainAxisSize.min, // La barre prend juste la place nécessaire
-            children: [
-              // 1. BOUTON RETOUR
-              IconButton(
-                // On réduit légèrement la zone de clic pour compacter
-                padding: EdgeInsets.zero,
-                constraints: const BoxConstraints(),
-                icon: Icon(
-                  Icons.arrow_back_ios_new,
-                  size: 18,
-                  color: _showDashboard ? Colors.black26 : AppTheme.darkText,
-                ),
-                onPressed: _showDashboard
-                    ? null
-                    : () async {
-                        if (await _activeController.canGoBack())
-                          _activeController.goBack();
-                      },
+  // --- HELPER : ITEM DE LA GRILLE FAVORIS ---
+  Widget _buildDashboardFavoriteItem(
+    WebPage page,
+    bool isDark,
+    Color textColor,
+  ) {
+    return GestureDetector(
+      onTap: () => _loadUrlOrSearch(page.url),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          // L'Icône (Favicon)
+          Container(
+            width: 60,
+            height: 60,
+            decoration: BoxDecoration(
+              color: isDark
+                  ? Colors.white.withValues(alpha: 0.08)
+                  : Colors.white,
+              borderRadius: BorderRadius.circular(18), // Arrondi "Tech"
+              border: Border.all(
+                color: isDark
+                    ? Colors.white.withValues(alpha: 0.1)
+                    : Colors.transparent,
+                width: 1,
               ),
-
-              const SizedBox(width: 12),
-
-              // 2. BOUTON FAVORIS (Collé au retour)
-              if (!_showDashboard)
-                Padding(
-                  padding: const EdgeInsets.only(right: 8),
-                  child: GestureDetector(
-                    onTap: _toggleFavorite,
-                    child: Icon(
-                      _isCurrentPageFavorite
-                          ? Icons.star_rounded
-                          : Icons.star_outline_rounded,
-                      size: 22,
-                      color: _isCurrentPageFavorite
-                          ? AppTheme.habanero
-                          : AppTheme.darkText,
-                    ),
+              boxShadow: [
+                if (!isDark) // Ombre seulement en mode clair
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.05),
+                    blurRadius: 10,
+                    offset: const Offset(0, 5),
                   ),
-                ),
+              ],
+            ),
+            padding: const EdgeInsets.all(12), // Padding interne pour l'image
+            child: page.url.isEmpty
+                ? Icon(Icons.public, color: textColor.withOpacity(0.5))
+                : Image.network(
+                    _getFaviconUrl(page.url),
+                    fit: BoxFit.contain,
+                    errorBuilder: (context, error, stackTrace) {
+                      // Fallback si pas de favicon
+                      return Icon(
+                        Icons.public,
+                        color: textColor.withOpacity(0.2),
+                      );
+                    },
+                  ),
+          ),
 
-              // 3. BARRE DE RECHERCHE (Plus fine)
-              Expanded(
-                child: GestureDetector(
-                  onTap: _openSearchMode,
-                  child: Container(
-                    height: 36, // HAUTEUR RÉDUITE (était 40)
-                    decoration: BoxDecoration(
-                      color: AppTheme.asterBlue.withOpacity(0.1),
-                      borderRadius: BorderRadius.circular(18), // Arrondi ajusté
-                    ),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(
-                          Icons.search,
-                          size: 14,
-                          color: AppTheme.darkText.withOpacity(0.5),
-                        ), // Icône plus petite
-                        const SizedBox(width: 6),
-                        Flexible(
-                          child: Text(
-                            _showDashboard
-                                ? "Rechercher..."
-                                : (_tabs[_currentTabIndex].title.isEmpty
-                                      ? "Recherche"
-                                      : Uri.tryParse(
-                                              _urlController.text,
-                                            )?.host.replaceFirst('www.', '') ??
-                                            _tabs[_currentTabIndex].title),
-                            style: TextStyle(
-                              color: AppTheme.darkText.withOpacity(1),
-                              fontSize: 12, // Texte affiné
-                              fontWeight: FontWeight.w600,
-                              fontFamily: 'Montserrat',
+          const SizedBox(height: 10), // Espace Icône/Texte
+          // Le Titre du site
+          SizedBox(
+            width: 70, // Largeur max pour couper le texte
+            child: Text(
+              page.title?.trim().isEmpty == true ? "Site" : page.title!,
+              textAlign: TextAlign.center,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.w500,
+                color: textColor.withOpacity(0.8),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildBottomBar(bool isDark) {
+    // Définition palette locale
+    final Color glassColor = isDark
+        ? AppTheme.darkSurface
+        : AppTheme.lightSurface;
+    final Color iconColor = isDark
+        ? AppTheme.darkTextPrimary
+        : AppTheme.lightTextPrimary;
+    final Color borderColor = isDark
+        ? AppTheme.darkBorder
+        : AppTheme.lightBorder;
+
+    // EST-CE QUE LA BARRE EST RÉDUITE ?
+    // Elle est réduite si on scroll vers le bas (_isBottomBarHidden) ET qu'on n'est pas sur le dashboard
+    final bool isReduced = _isBottomBarHidden && !_showDashboard;
+
+    return SafeArea(
+      top: false,
+      child: GestureDetector(
+        // SI RÉDUIT : Un clic n'importe où sur la barre la ré-ouvre
+        onTap: isReduced
+            ? () => setState(() => _isBottomBarHidden = false)
+            : null,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 300),
+          curve: Curves.easeInOut,
+          // Marge externe : On la colle plus au bord si réduite
+          padding: EdgeInsets.symmetric(
+            horizontal: isReduced
+                ? 120
+                : 10, // Plus compacte horizontalement si réduite
+            vertical: isReduced ? 7 : 10,
+          ),
+          child: GlassContainer(
+            // Animation des formes
+            borderRadius: BorderRadius.circular(isReduced ? 30 : 26),
+            blur: 7,
+            opacity: 0.6,
+            color: glassColor,
+            borderColor: borderColor.withOpacity(0.3),
+            // Padding interne réduit quand la barre est petite
+            padding: EdgeInsets.symmetric(
+              vertical: isReduced ? 0 : 3,
+              horizontal: isReduced ? 0 : 12,
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                // --- GROUPE GAUCHE (Retour + Favoris) ---
+                _AnimatedWidthWrapper(
+                  visible: !isReduced, // Caché si réduit
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      IconButton(
+                        padding: EdgeInsets.zero,
+                        constraints: const BoxConstraints(),
+                        icon: Icon(
+                          Icons.arrow_back_ios_new,
+                          size: 18,
+                          color: _showDashboard
+                              ? iconColor.withOpacity(0.3)
+                              : iconColor,
+                        ),
+                        onPressed: _showDashboard
+                            ? null
+                            : () async {
+                                if (await _activeController.canGoBack())
+                                  _activeController.goBack();
+                              },
+                      ),
+                      const SizedBox(width: 12),
+                      if (!_showDashboard)
+                        Padding(
+                          padding: const EdgeInsets.only(right: 8),
+                          child: GestureDetector(
+                            onTap: _toggleFavorite,
+                            child: Icon(
+                              _isCurrentPageFavorite
+                                  ? Icons.star_rounded
+                                  : Icons.star_outline_rounded,
+                              size: 22,
+                              color: _isCurrentPageFavorite
+                                  ? const Color(0xFFFFB703)
+                                  : iconColor,
                             ),
-                            overflow: TextOverflow.ellipsis,
                           ),
                         ),
-                      ],
+                    ],
+                  ),
+                ),
+
+                // --- CENTRE (Barre d'adresse) ---
+                Expanded(
+                  child: GestureDetector(
+                    onTap: () {
+                      if (isReduced) {
+                        // Si réduit, le clic sert d'abord à agrandir la barre
+                        setState(() => _isBottomBarHidden = false);
+                      } else {
+                        // Si déjà grand, on ouvre la recherche
+                        _openSearchMode();
+                      }
+                    },
+                    child: AnimatedContainer(
+                      duration: const Duration(milliseconds: 300),
+                      height: isReduced ? 25 : 36,
+                      padding: const EdgeInsets.symmetric(horizontal: 12),
+                      decoration: BoxDecoration(
+                        // Si réduit : Fond transparent (pour s'intégrer à la glass bar). Sinon fond normal.
+                        color: isReduced
+                            ? Colors.transparent
+                            : (isDark
+                                  ? Colors.white.withOpacity(0.1)
+                                  : AppTheme.accentBrand.withOpacity(0.05)),
+                        borderRadius: BorderRadius.circular(18),
+                      ),
+                      child: Row(
+                        mainAxisAlignment:
+                            MainAxisAlignment.center, // Centré quand réduit
+                        children: [
+                          // Cadenas (Disparaît si réduit pour épurer)
+                          if (!isReduced) ...[
+                            Icon(
+                              Icons.lock_outline_rounded,
+                              size: 14,
+                              color: iconColor.withOpacity(0.5),
+                            ),
+                            const SizedBox(width: 8),
+                          ],
+
+                          // URL / Titre
+                          Flexible(
+                            // Flexible permet au texte de prendre la place sans erreur
+                            child: Text(
+                              _showDashboard
+                                  ? "Rechercher..."
+                                  : (_tabs[_currentTabIndex].title.isEmpty
+                                        ? "Recherche"
+                                        : Uri.tryParse(_urlController.text)
+                                                  ?.host
+                                                  .replaceFirst('www.', '') ??
+                                              _tabs[_currentTabIndex].title),
+                              style: TextStyle(
+                                color: iconColor.withOpacity(
+                                  isReduced ? 1.0 : 0.9,
+                                ), // Plus visible si réduit
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600,
+                                fontFamily: 'Plus Jakarta Sans',
+                              ),
+                              overflow: TextOverflow.ellipsis,
+                              textAlign: TextAlign.center,
+                            ),
+                          ),
+
+                          // Bouton Refresh (Disparaît si réduit)
+                          if (!_showDashboard && !isReduced) ...[
+                            const SizedBox(width: 8),
+                            GestureDetector(
+                              onTap: () {
+                                if (_tabs[_currentTabIndex].isLoading) {
+                                  _activeController.reload();
+                                } else {
+                                  _activeController.reload();
+                                }
+                              },
+                              child: Icon(
+                                _tabs[_currentTabIndex].isLoading
+                                    ? Icons.close_rounded
+                                    : Icons.refresh_rounded,
+                                size: 16,
+                                color: iconColor.withOpacity(0.7),
+                              ),
+                            ),
+                          ],
+                        ],
+                      ),
                     ),
                   ),
                 ),
-              ),
 
-              const SizedBox(width: 12),
-
-              // 4. COMPTEUR ONGLETS
-              GestureDetector(
-                onTap: _toggleTabSwitcher,
-                child: Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 10,
-                    vertical: 5,
-                  ),
-                  decoration: BoxDecoration(
-                    border: Border.all(color: AppTheme.darkText, width: 1.5),
-                    borderRadius: BorderRadius.circular(20),
-                  ),
-                  child: Text(
-                    _tabs.length.toString(),
-                    style: const TextStyle(
-                      fontWeight: FontWeight.bold,
-                      fontSize: 11,
-                      color: AppTheme.darkText,
-                    ),
-                  ),
-                ),
-              ),
-
-              const SizedBox(width: 12),
-
-              // 5. BOUTON MENU
-              GestureDetector(
-                onTap: _toggleMenu,
-                child: Container(
-                  padding: const EdgeInsets.all(8), // Padding réduit
-                  decoration: BoxDecoration(
-                    color: AppTheme.habanero,
-                    shape: BoxShape.circle,
-                    boxShadow: [
-                      BoxShadow(
-                        color: AppTheme.habanero.withOpacity(0.4),
-                        blurRadius: 8,
-                        offset: const Offset(0, 3),
+                // --- GROUPE DROITE (Onglets + Menu) ---
+                _AnimatedWidthWrapper(
+                  visible: !isReduced, // Caché si réduit
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const SizedBox(width: 12),
+                      GestureDetector(
+                        onTap: _toggleTabSwitcher,
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 10,
+                            vertical: 5,
+                          ),
+                          decoration: BoxDecoration(
+                            border: Border.all(color: iconColor, width: 1.5),
+                            borderRadius: BorderRadius.circular(20),
+                          ),
+                          child: Text(
+                            _tabs.length.toString(),
+                            style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 11,
+                              color: iconColor,
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      GestureDetector(
+                        onTap: _toggleMenu,
+                        child: Container(
+                          padding: const EdgeInsets.all(8),
+                          decoration: BoxDecoration(
+                            color: AppTheme.primaryBrand,
+                            shape: BoxShape.circle,
+                            boxShadow: [
+                              BoxShadow(
+                                color: AppTheme.primaryBrand.withOpacity(0.4),
+                                blurRadius: 8,
+                                offset: const Offset(0, 3),
+                              ),
+                            ],
+                          ),
+                          child: const Icon(
+                            Icons.menu,
+                            color: Colors.white,
+                            size: 16,
+                          ),
+                        ),
                       ),
                     ],
                   ),
-                  child: const Icon(
-                    Icons.menu,
-                    color: Colors.white,
-                    size: 16,
-                  ), // Icône plus petite
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),
     );
   }
 
-  // --- MENU CONTENU (NAVIGATION CORRIGÉE) ---
-  Widget _buildMenuContent() {
+  Widget _buildMenuContent(bool isDark) {
+    final Color bgColor = isDark
+        ? AppTheme.darkSurface
+        : AppTheme.lightBackground;
+    final Color textColor = isDark
+        ? AppTheme.darkTextPrimary
+        : AppTheme.lightTextPrimary;
+    final Color cardColor = isDark
+        ? Colors.white.withOpacity(0.05)
+        : Colors.white.withOpacity(0.7);
+
     return Container(
-      decoration: const BoxDecoration(
-        color: AppTheme.lusterWhite,
-        borderRadius: BorderRadius.vertical(top: Radius.circular(30)),
+      decoration: BoxDecoration(
+        color: bgColor,
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(30)),
       ),
       child: Scaffold(
         backgroundColor: Colors.transparent,
@@ -858,21 +1190,21 @@ void _showDownloadOption(String imageUrl) {
                   children: [
                     Text(
                       "Menu",
-                      style: Theme.of(context).textTheme.displayLarge,
+                      style: Theme.of(
+                        context,
+                      ).textTheme.displayLarge?.copyWith(color: textColor),
                     ),
                     GestureDetector(
                       onTap: _toggleMenu,
                       child: Container(
                         padding: const EdgeInsets.all(8),
                         decoration: BoxDecoration(
-                          color: Colors.black.withOpacity(0.05),
+                          color: isDark
+                              ? Colors.white.withOpacity(0.1)
+                              : AppTheme.asterBlue.withOpacity(0.1),
                           shape: BoxShape.circle,
                         ),
-                        child: const Icon(
-                          Icons.close,
-                          color: AppTheme.darkText,
-                          size: 24,
-                        ),
+                        child: Icon(Icons.close, color: textColor, size: 24),
                       ),
                     ),
                   ],
@@ -884,7 +1216,9 @@ void _showDownloadOption(String imageUrl) {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      _MenuSectionTitle(title: "INTELLIGENCE ARTIFICIELLE"),
+                      const _MenuSectionTitle(
+                        title: "INTELLIGENCE ARTIFICIELLE",
+                      ),
                       const SizedBox(height: 15),
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -893,6 +1227,7 @@ void _showDownloadOption(String imageUrl) {
                             icon: Icons.flash_on_rounded,
                             label: "Résumé",
                             color: Colors.amber[800]!,
+                            textColor: textColor,
                             onTap: () async {
                               final c = await _getPageContent();
                               _launchAIChat(c, "Résumé concis.");
@@ -902,6 +1237,7 @@ void _showDownloadOption(String imageUrl) {
                             icon: Icons.format_list_bulleted_rounded,
                             label: "Points Clés",
                             color: AppTheme.asterBlue,
+                            textColor: textColor,
                             onTap: () async {
                               final c = await _getPageContent();
                               _launchAIChat(c, "Points clés.");
@@ -911,6 +1247,7 @@ void _showDownloadOption(String imageUrl) {
                             icon: Icons.translate_rounded,
                             label: "Traduire",
                             color: Colors.purple[300]!,
+                            textColor: textColor,
                             onTap: () async {
                               final c = await _getPageContent();
                               _launchAIChat(c, "Traduis en FR.");
@@ -920,6 +1257,7 @@ void _showDownloadOption(String imageUrl) {
                             icon: Icons.chat_bubble_outline,
                             label: "Discussion",
                             color: Colors.teal,
+                            textColor: textColor,
                             onTap: () async {
                               final c = await _getPageContent();
                               _launchAIChat(c, null);
@@ -927,50 +1265,40 @@ void _showDownloadOption(String imageUrl) {
                           ),
                         ],
                       ),
-
                       const SizedBox(height: 40),
-                      _MenuSectionTitle(title: "NAVIGATION"),
+                      const _MenuSectionTitle(title: "NAVIGATION"),
                       const SizedBox(height: 15),
-
-                      // NAVIGATION CORRIGÉE : On utilise await et un flag pour savoir si on doit rouvrir le menu
                       _MenuTile(
                         icon: Icons.bookmarks_outlined,
                         title: "Mes Favoris",
+                        bgColor: cardColor,
+                        textColor: textColor,
                         onTap: () async {
-                          setState(
-                            () => _isMenuOpen = false,
-                          ); // Ferme visuellement pour la transition
-                          bool linkSelected =
-                              false; // Flag pour savoir si l'utilisateur a cliqué un lien
-
+                          setState(() => _isMenuOpen = false);
+                          bool linkSelected = false;
                           await Navigator.push(
                             context,
                             MaterialPageRoute(
                               builder: (_) => FavoritesScreen(
                                 onUrlSelected: (url) {
                                   linkSelected = true;
-                                  _loadUrlOrSearch(
-                                    url,
-                                  ); // Si on charge une URL, on ne rouvre pas le menu
+                                  _loadUrlOrSearch(url);
                                 },
                               ),
                             ),
                           );
-
-                          // Si on n'a PAS cliqué sur un lien (donc juste fait retour), on rouvre le menu
-                          if (!linkSelected && mounted) {
+                          if (!linkSelected && mounted)
                             setState(() => _isMenuOpen = true);
-                          }
                         },
                       ),
-
                       _MenuTile(
                         icon: Icons.history,
                         title: "Historique",
+                        bgColor: cardColor,
+                        textColor: textColor,
                         onTap: () async {
                           setState(() => _isMenuOpen = false);
                           bool linkSelected = false;
-
                           await Navigator.push(
                             context,
                             MaterialPageRoute(
@@ -982,31 +1310,31 @@ void _showDownloadOption(String imageUrl) {
                               ),
                             ),
                           );
-
-                          if (!linkSelected && mounted) {
+                          if (!linkSelected && mounted)
                             setState(() => _isMenuOpen = true);
-                          }
                         },
                       ),
-
                       const SizedBox(height: 40),
-                      _MenuSectionTitle(title: "OUTILS"),
+                      const _MenuSectionTitle(title: "OUTILS"),
                       const SizedBox(height: 10),
                       _MenuTile(
                         icon: Icons.chrome_reader_mode_outlined,
                         title: "Mode Lecture Zen",
+                        bgColor: cardColor,
+                        textColor: textColor,
                         onTap: _openReaderMode,
                       ),
                       _MenuTile(
                         icon: Icons.settings_outlined,
                         title: "Paramètres",
+                        bgColor: cardColor,
+                        textColor: textColor,
                         onTap: () {
-                          setState(() => _isMenuOpen = false); // Ferme le menu
+                          setState(() => _isMenuOpen = false);
                           Navigator.push(
                             context,
                             MaterialPageRoute(
-                              builder: (_) =>
-                                  const SettingsScreen(), // Ouvre les réglages
+                              builder: (_) => const SettingsScreen(),
                             ),
                           );
                         },
@@ -1022,11 +1350,21 @@ void _showDownloadOption(String imageUrl) {
     );
   }
 
-  // --- TAB SWITCHER & SEARCH (INCHANGÉS MAIS INCLUS) ---
-  Widget _buildTabSwitcherContent() {
+  Widget _buildTabSwitcherContent(bool isDark) {
+    final Color glassColor = isDark
+        ? AppTheme.darkBackground
+        : AppTheme.lightBackground;
+    final Color textColor = isDark
+        ? AppTheme.darkTextPrimary
+        : AppTheme.lightTextPrimary;
+    final Color cardColor = isDark
+        ? AppTheme.darkSurface
+        : AppTheme.lightSurface;
+
     return GlassContainer(
-      blur: 15,
-      opacity: 0.4,
+      blur: 7,
+      opacity: 0.6, // Très opaque
+      color: glassColor,
       child: SafeArea(
         child: Column(
           children: [
@@ -1039,20 +1377,20 @@ void _showDownloadOption(String imageUrl) {
                     "Onglets",
                     style: Theme.of(
                       context,
-                    ).textTheme.displayLarge?.copyWith(color: Colors.black),
+                    ).textTheme.displayLarge?.copyWith(color: textColor),
                   ),
                   GestureDetector(
                     onTap: _toggleTabSwitcher,
                     child: Container(
                       padding: const EdgeInsets.all(10),
-                      decoration: const BoxDecoration(
-                        color: Colors.white,
+                      decoration: BoxDecoration(
+                        color: textColor,
                         shape: BoxShape.circle,
                       ),
-                      child: const Text(
+                      child: Text(
                         "OK",
                         style: TextStyle(
-                          color: Colors.black,
+                          color: glassColor,
                           fontWeight: FontWeight.bold,
                           fontSize: 12,
                         ),
@@ -1079,14 +1417,17 @@ void _showDownloadOption(String imageUrl) {
                     onTap: () => _switchToTab(index),
                     child: Container(
                       decoration: BoxDecoration(
-                        color: AppTheme.lusterWhite,
+                        color: cardColor,
                         borderRadius: BorderRadius.circular(20),
                         border: isActive
                             ? Border.all(color: AppTheme.habanero, width: 3)
-                            : null,
+                            : Border.all(
+                                color: textColor.withOpacity(0.1),
+                                width: 1,
+                              ),
                         boxShadow: [
                           BoxShadow(
-                            color: Colors.black.withOpacity(0.2),
+                            color: Colors.black12,
                             blurRadius: 10,
                             offset: const Offset(0, 5),
                           ),
@@ -1123,18 +1464,19 @@ void _showDownloadOption(String imageUrl) {
                                     tab.title,
                                     maxLines: 1,
                                     overflow: TextOverflow.ellipsis,
-                                    style: const TextStyle(
+                                    style: TextStyle(
                                       fontSize: 10,
                                       fontWeight: FontWeight.bold,
+                                      color: textColor,
                                     ),
                                   ),
                                 ),
                                 GestureDetector(
                                   onTap: () => _closeTab(index),
-                                  child: const Icon(
+                                  child: Icon(
                                     Icons.close,
                                     size: 16,
-                                    color: Colors.black45,
+                                    color: textColor,
                                   ),
                                 ),
                               ],
@@ -1144,13 +1486,17 @@ void _showDownloadOption(String imageUrl) {
                             child: Container(
                               margin: const EdgeInsets.all(8),
                               decoration: BoxDecoration(
-                                color: Colors.grey[200],
+                                color: isDark
+                                    ? Colors.black26
+                                    : Colors.grey[200], // Placeholder
                                 borderRadius: BorderRadius.circular(12),
                               ),
                               child: Center(
                                 child: Icon(
                                   Icons.public,
-                                  color: Colors.black12,
+                                  color: isDark
+                                      ? Colors.white12
+                                      : Colors.black12,
                                   size: 40,
                                 ),
                               ),
@@ -1206,9 +1552,17 @@ void _showDownloadOption(String imageUrl) {
     );
   }
 
-  // --- SEARCH OVERLAY (ZEN MODE) ---
-  // --- SEARCH OVERLAY (ZEN MODE) ---
-  Widget _buildSearchOverlay() {
+  Widget _buildSearchOverlay(bool isDark) {
+    final Color bgColor = isDark
+        ? AppTheme.darkBackground
+        : AppTheme.lightBackground;
+    final Color textColor = isDark
+        ? AppTheme.darkTextPrimary
+        : AppTheme.lightTextPrimary;
+    final Color hintColor = isDark
+        ? AppTheme.darkTextSecondary
+        : AppTheme.lightTextSecondary;
+
     return TweenAnimationBuilder<double>(
       tween: Tween(begin: 0.0, end: 1.0),
       duration: const Duration(milliseconds: 300),
@@ -1218,22 +1572,20 @@ void _showDownloadOption(String imageUrl) {
           opacity: value,
           child: GlassContainer(
             blur: 7 * value,
-            opacity: 0.4 * value,
+            opacity: 0.6 * value, // Fond opaque pour bien lire
             borderRadius: BorderRadius.zero,
             hasShadow: false,
-            // CORRECTION ICI : Ajout du "!"
-            child: child!, 
+            color: bgColor,
+            child: child!,
           ),
         );
       },
-      // Ce Scaffold est passé comme "child" au builder ci-dessus pour éviter de le reconstruire à chaque frame
-      child: Scaffold( 
+      child: Scaffold(
         backgroundColor: Colors.transparent,
         body: SafeArea(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // 1. Bouton Fermer
               Padding(
                 padding: const EdgeInsets.fromLTRB(20, 20, 20, 0),
                 child: Row(
@@ -1244,116 +1596,119 @@ void _showDownloadOption(String imageUrl) {
                       child: Container(
                         padding: const EdgeInsets.all(8),
                         decoration: BoxDecoration(
-                          color: Colors.black.withOpacity(0.05), 
-                          shape: BoxShape.circle
+                          color: textColor.withOpacity(0.05),
+                          shape: BoxShape.circle,
                         ),
-                        child: const Icon(Icons.close, color: AppTheme.darkText, size: 20),
+                        child: Icon(Icons.close, color: textColor, size: 20),
                       ),
                     ),
                   ],
                 ),
               ),
-              
-              // 2. Champ de recherche
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 24.0),
                 child: Theme(
                   data: Theme.of(context).copyWith(
                     textSelectionTheme: TextSelectionThemeData(
-                      cursorColor: AppTheme.habanero, 
-                      selectionColor: AppTheme.asterBlue.withOpacity(0.3), 
-                      selectionHandleColor: AppTheme.habanero
-                    )
+                      cursorColor: AppTheme.habanero,
+                      selectionColor: AppTheme.asterBlue.withOpacity(0.3),
+                      selectionHandleColor: AppTheme.habanero,
+                    ),
                   ),
                   child: TextField(
-                    controller: _urlController, 
-                    focusNode: _searchFocusNode, 
-                    onSubmitted: _loadUrlOrSearch, 
+                    controller: _urlController,
+                    focusNode: _searchFocusNode,
+                    onSubmitted: _loadUrlOrSearch,
                     onChanged: _onSearchTextChanged,
-                    style: const TextStyle(
-                      fontSize: 32, 
-                      fontWeight: FontWeight.w600, 
-                      color: AppTheme.darkText, 
-                      height: 1.2, 
-                      letterSpacing: -0.5, 
-                      fontFamily: 'Montserrat'
+                    style: TextStyle(
+                      fontSize: 32,
+                      fontWeight: FontWeight.w600,
+                      color: textColor,
+                      height: 1.2,
+                      letterSpacing: -0.5,
+                      fontFamily: 'Montserrat',
                     ),
-                    textAlign: TextAlign.left, 
-                    keyboardType: TextInputType.text, 
-                    textInputAction: TextInputAction.search, 
+                    textAlign: TextAlign.left,
+                    keyboardType: TextInputType.text,
+                    textInputAction: TextInputAction.search,
                     maxLines: null,
                     decoration: InputDecoration(
-                      hintText: "Qu'avez-vous en tête ?", 
+                      hintText: "What's on your mind ?",
                       hintStyle: TextStyle(
-                        color: AppTheme.greyText.withOpacity(0.5), 
-                        fontFamily: 'Playfair Display', 
-                        fontStyle: FontStyle.italic
-                      ), 
-                      border: InputBorder.none, 
-                      focusedBorder: InputBorder.none, 
-                      enabledBorder: InputBorder.none, 
-                      filled: false, 
-                      contentPadding: const EdgeInsets.only(top: 30, bottom: 20)
+                        color: hintColor,
+                        fontFamily: 'Playfair Display',
+                        fontStyle: FontStyle.normal,
+                        fontWeight: FontWeight.w300,
+                      ),
+                      border: InputBorder.none,
+                      focusedBorder: InputBorder.none,
+                      enabledBorder: InputBorder.none,
+                      filled: false,
+                      contentPadding: const EdgeInsets.only(
+                        top: 30,
+                        bottom: 20,
+                      ),
                     ),
                   ),
                 ),
               ),
-
-              // 3. Suggestions
               Expanded(
-                child: _suggestions.isEmpty 
-                  ? const SizedBox() 
-                  : ListView.builder(
-                      padding: const EdgeInsets.symmetric(horizontal: 24), 
-                      itemCount: _suggestions.length,
-                      itemBuilder: (context, index) {
-                        final page = _suggestions[index];
-                        return GestureDetector(
-                          onTap: () => _loadUrlOrSearch(page.url), 
-                          child: Padding(
-                            padding: const EdgeInsets.symmetric(vertical: 12.0), 
-                            child: Row(
-                              children: [
-                                Icon(
-                                  Icons.history, 
-                                  color: AppTheme.asterBlue.withOpacity(0.7), 
-                                  size: 20
-                                ), 
-                                const SizedBox(width: 15), 
-                                Expanded(
-                                  child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start, 
-                                    children: [
-                                      Text(
-                                        page.title ?? page.url, 
-                                        maxLines: 1, 
-                                        overflow: TextOverflow.ellipsis, 
-                                        style: const TextStyle(
-                                          fontFamily: 'Montserrat', 
-                                          fontWeight: FontWeight.w600, 
-                                          fontSize: 16, 
-                                          color: AppTheme.darkText
-                                        )
-                                      ), 
-                                      Text(
-                                        page.url, 
-                                        maxLines: 1, 
-                                        overflow: TextOverflow.ellipsis, 
-                                        style: const TextStyle(
-                                          fontFamily: 'Montserrat', 
-                                          fontSize: 12, 
-                                          color: AppTheme.greyText
-                                        )
-                                      )
-                                    ]
-                                  )
-                                )
-                              ]
-                            )
-                          ),
-                        );
-                      },
-                    ),
+                child: _suggestions.isEmpty
+                    ? const SizedBox()
+                    : ListView.builder(
+                        padding: const EdgeInsets.symmetric(horizontal: 24),
+                        itemCount: _suggestions.length,
+                        itemBuilder: (context, index) {
+                          final page = _suggestions[index];
+                          return GestureDetector(
+                            onTap: () => _loadUrlOrSearch(page.url),
+                            child: Padding(
+                              padding: const EdgeInsets.symmetric(
+                                vertical: 12.0,
+                              ),
+                              child: Row(
+                                children: [
+                                  Icon(
+                                    Icons.history,
+                                    color: AppTheme.asterBlue.withOpacity(0.7),
+                                    size: 20,
+                                  ),
+                                  const SizedBox(width: 15),
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          page.title ?? page.url,
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                          style: TextStyle(
+                                            fontFamily: 'Montserrat',
+                                            fontWeight: FontWeight.w600,
+                                            fontSize: 16,
+                                            color: textColor,
+                                          ),
+                                        ),
+                                        Text(
+                                          page.url,
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                          style: const TextStyle(
+                                            fontFamily: 'Montserrat',
+                                            fontSize: 12,
+                                            color: AppTheme.greyText,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          );
+                        },
+                      ),
               ),
             ],
           ),
@@ -1363,7 +1718,8 @@ void _showDownloadOption(String imageUrl) {
   }
 }
 
-// --- WIDGETS AUXILIAIRES ---
+// --- WIDGETS AUXILIAIRES ADAPTÉS ---
+
 class _MenuSectionTitle extends StatelessWidget {
   final String title;
   const _MenuSectionTitle({required this.title});
@@ -1384,13 +1740,17 @@ class _MenuTile extends StatelessWidget {
   final IconData icon;
   final String title;
   final VoidCallback onTap;
-  final Color? iconColor;
+  final Color bgColor;
+  final Color textColor;
+
   const _MenuTile({
     required this.icon,
     required this.title,
     required this.onTap,
-    this.iconColor,
+    required this.bgColor,
+    required this.textColor,
   });
+
   @override
   Widget build(BuildContext context) => GestureDetector(
     onTap: onTap,
@@ -1398,20 +1758,20 @@ class _MenuTile extends StatelessWidget {
       margin: const EdgeInsets.only(bottom: 15),
       padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 20),
       decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.6),
+        color: bgColor,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Colors.white, width: 1.5),
+        border: Border.all(color: textColor.withOpacity(0.1), width: 1.5),
       ),
       child: Row(
         children: [
-          Icon(icon, color: iconColor ?? AppTheme.darkText, size: 20),
+          Icon(icon, color: textColor, size: 20),
           const SizedBox(width: 15),
           Text(
             title,
-            style: const TextStyle(
+            style: TextStyle(
               fontWeight: FontWeight.w600,
               fontSize: 15,
-              color: AppTheme.darkText,
+              color: textColor,
             ),
           ),
           const Spacer(),
@@ -1430,13 +1790,17 @@ class _AIActionButton extends StatelessWidget {
   final IconData icon;
   final String label;
   final Color color;
+  final Color textColor;
   final VoidCallback onTap;
+
   const _AIActionButton({
     required this.icon,
     required this.label,
     required this.color,
+    required this.textColor,
     required this.onTap,
   });
+
   @override
   Widget build(BuildContext context) => GestureDetector(
     onTap: onTap,
@@ -1455,8 +1819,8 @@ class _AIActionButton extends StatelessWidget {
         const SizedBox(height: 8),
         Text(
           label,
-          style: const TextStyle(
-            color: AppTheme.greyText,
+          style: TextStyle(
+            color: textColor.withOpacity(0.7),
             fontSize: 11,
             fontWeight: FontWeight.w600,
           ),
@@ -1464,4 +1828,26 @@ class _AIActionButton extends StatelessWidget {
       ],
     ),
   );
+}
+
+// Petit helper pour animer la disparition des icônes
+class _AnimatedWidthWrapper extends StatelessWidget {
+  final bool visible;
+  final Widget child;
+
+  const _AnimatedWidthWrapper({required this.visible, required this.child});
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedSize(
+      duration: const Duration(milliseconds: 300),
+      curve: Curves.easeInOut,
+      child: SizedBox(
+        width: visible ? null : 0, // Si pas visible, largeur 0
+        child: visible
+            ? child
+            : const SizedBox(), // Si pas visible, rien ne s'affiche
+      ),
+    );
+  }
 }

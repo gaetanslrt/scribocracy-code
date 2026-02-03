@@ -2,90 +2,82 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 class AppTheme {
-  // --- PALETTE IDENTITÉ VISUELLE ---
-  
-  // Fond principal : Luster White (Papier chaud)
-  static const Color lusterWhite = Color(0xFFF4F1EC); 
-  
-  // Accents doux : Aster Flower Blue
-  static const Color asterBlue = Color(0xFF9BACD8);
-  
-  // Action / Highlight : Habañero (Orange vif)
-  static const Color habanero = Color(0xFFF98513);
-  
-  // Textes (On garde un noir doux pour le contraste sur le blanc crème)
-  static const Color darkText = Color(0xFF1A1A1A);
-  static const Color greyText = Color(0xFF6E6E73);
+  // ===========================================================================
+  // 1. NOUVELLE IDENTITÉ VISUELLE (STYLE "TECH PREMIUM")
+  // ===========================================================================
 
-  // --- CONFIGURATION THÈME ---
+  // PRIMARY : "Indigo Electric" (Remplaçant du Habanero)
+  // C'est la couleur de l'action, de la tech et de la confiance.
+  static const Color primaryBrand = Color(0xFF4F46E5);
 
+  // SECONDARY : "Sky Blue" (Pour les accents subtils)
+  static const Color accentBrand = Color(0xFF0EA5E9);
+
+  // NEUTRAL : "Slate" (Gris bleuté moderne, pas juste gris)
+  static const Color greyText = Color(0xFF64748B);
+
+  // ===========================================================================
+  // 2. THÈME CLAIR (LIGHT MODE) - Style "Clean SaaS"
+  // ===========================================================================
+  // Un blanc cassé très froid, presque bleuté, très propre.
+  static const Color lightBackground = Color(0xFFF8FAFC);
+
+  // Blanc pur pour les surfaces
+  static const Color lightSurface = Colors.white;
+
+  // Texte : Un "Gunmetal" foncé, plus doux que le noir pur
+  static const Color lightTextPrimary = Color(0xFF0F172A);
+  static const Color lightTextSecondary = Color(0xFF475569);
+
+  // Bordures très fines et subtiles
+  static const Color lightBorder = Color(0xFFE2E8F0);
+
+  // ===========================================================================
+  // 3. THÈME SOMBRE (DARK MODE) - Style "Deep Space"
+  // ===========================================================================
+  // Fini le noir #000000. On part sur un bleu nuit très profond.
+  static const Color darkBackground = Color(0xFF020617);
+
+  // Surface légèrement plus claire
+  static const Color darkSurface = Color(0xFF0F172A);
+
+  // Texte blanc cassé
+  static const Color darkTextPrimary = Color(0xFFF1F5F9);
+  static const Color darkTextSecondary = Color(0xFF94A3B8);
+
+  // Bordures sombres
+  static const Color darkBorder = Color(0xFF1E293B);
+
+  // ===========================================================================
+  // 4. ALIAS DE COMPATIBILITÉ (POUR NE RIEN CASSER)
+  // ===========================================================================
+  // L'ancien "Habanero" pointe maintenant vers notre nouvel Indigo
+  static const Color habanero = primaryBrand;
+  static const Color asterBlue = accentBrand;
+
+  static const Color lusterWhite = lightBackground;
+  static const Color darkText = lightTextPrimary; // L'ancien "Texte par défaut"
+
+  // ===========================================================================
+  // 5. CONFIGURATION GLOBALE DU THÈME
+  // ===========================================================================
   static ThemeData get modernGlassTheme {
     return ThemeData(
       useMaterial3: true,
-      brightness: Brightness.light,
-      scaffoldBackgroundColor: lusterWhite, // Le fond crème
-      primaryColor: asterBlue,
-      
-      colorScheme: const ColorScheme.light(
-        primary: asterBlue,
-        secondary: habanero,
-        surface: lusterWhite,
-        onSurface: darkText,
-        background: lusterWhite,
-      ),
-      
-      // --- TYPOGRAPHIE ---
-      textTheme: TextTheme(
-        // TITRES : Playfair Display (Élégant, Sérif)
-        displayLarge: GoogleFonts.playfairDisplay(
-          fontSize: 32, 
-          fontWeight: FontWeight.w700, 
-          color: darkText,
-          letterSpacing: -0.5
-        ),
-        headlineSmall: GoogleFonts.playfairDisplay(
-          fontSize: 20,
-          fontWeight: FontWeight.w600,
-          color: darkText
-        ),
-        
-        // CORPS DE TEXTE : Montserrat (Moderne, Sans-Sérif)
-        bodyLarge: GoogleFonts.montserrat(
-          fontSize: 16, 
-          height: 1.5, 
-          color: darkText, 
-          fontWeight: FontWeight.w500
-        ),
-        bodyMedium: GoogleFonts.montserrat(
-          fontSize: 14, 
-          color: greyText,
-          fontWeight: FontWeight.w500
-        ),
-        titleMedium: GoogleFonts.montserrat( // Pour les champs de texte
-          fontSize: 16,
-          color: darkText,
-          fontWeight: FontWeight.w600
-        ),
+      scaffoldBackgroundColor: lightBackground,
+      primaryColor: primaryBrand,
+
+      // On applique la nouvelle police "Plus Jakarta Sans" partout
+      textTheme: GoogleFonts.plusJakartaSansTextTheme().apply(
+        bodyColor: lightTextPrimary,
+        displayColor: lightTextPrimary,
       ),
 
-      // Styles globaux
-      appBarTheme: AppBarTheme(
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-        centerTitle: true,
-        scrolledUnderElevation: 0,
-        iconTheme: const IconThemeData(color: darkText),
-        titleTextStyle: GoogleFonts.playfairDisplay(
-          fontSize: 20, fontWeight: FontWeight.w700, color: darkText
-        )
-      ),
-      
-      inputDecorationTheme: InputDecorationTheme(
-        filled: true,
-        fillColor: Colors.white.withOpacity(0.5),
-        hintStyle: GoogleFonts.montserrat(color: Colors.black38),
-        contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
-        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+      colorScheme: ColorScheme.fromSeed(
+        seedColor: primaryBrand,
+        surface: lightSurface,
+        // On force la brightness pour que les textes s'adaptent
+        brightness: Brightness.light,
       ),
     );
   }
