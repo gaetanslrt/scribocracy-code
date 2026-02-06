@@ -730,6 +730,7 @@ class _BrowserScreenState extends ConsumerState<BrowserScreen> {
     final Color textColor = isDark
         ? AppTheme.darkTextPrimary
         : AppTheme.lightTextPrimary;
+    // On garde bgColor comme couleur de secours si l'image ne charge pas
     final Color bgColor = isDark
         ? AppTheme.darkSurface
         : AppTheme.lightBackground;
@@ -737,10 +738,25 @@ class _BrowserScreenState extends ConsumerState<BrowserScreen> {
     final favorites = _dashboardLinks.take(8).toList();
 
     return Container(
-      color: bgColor,
+      // 1. L'IMAGE DE FOND
+      decoration: BoxDecoration(
+        color: bgColor, // Couleur de fond (au cas où)
+        image: DecorationImage(
+          // Remplacez par le chemin de votre image
+          image: AssetImage(
+            isDark
+                ? 'assets/images/dark-gradient-background.png'
+                : 'assets/images/light-gradient-background.png',
+          ),
+          fit: BoxFit.cover, // L'image couvre tout l'écran
+        ),
+      ),
       child: Stack(
         children: [
-          // 1. MÉTÉO
+          // 2. LE VOILE DE PROTECTION (Overlay)
+          // C'est ça qui rend le texte lisible par-dessus n'importe quelle image
+
+          // 3. MÉTÉO (inchangé)
           Positioned(
             top: MediaQuery.of(context).padding.top + 20,
             right: 24,
@@ -767,7 +783,8 @@ class _BrowserScreenState extends ConsumerState<BrowserScreen> {
                           fontFamily: 'Montserrat',
                           fontSize: 12,
                           fontWeight: FontWeight.w500,
-                          color: AppTheme.greyText,
+                          color: AppTheme
+                              .greyText, // On garde le gris, il ressortira grâce au voile
                           height: 1.4,
                         ),
                       ),
@@ -775,7 +792,7 @@ class _BrowserScreenState extends ConsumerState<BrowserScreen> {
                   ),
           ),
 
-          // 2. CONTENU CENTRAL (SANS REFRESH INDICATOR)
+          // 4. CONTENU CENTRAL (inchangé)
           Positioned.fill(
             child: SingleChildScrollView(
               physics: const BouncingScrollPhysics(),
@@ -788,32 +805,41 @@ class _BrowserScreenState extends ConsumerState<BrowserScreen> {
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.start,
                   children: [
-                    // A. LE TITRE
+                    // TITRE
                     Text(
                       "Scribocracy",
                       style: Theme.of(context).textTheme.displayLarge?.copyWith(
-                        fontSize: 48,
+                        fontSize: 44,
                         color: textColor,
-                        letterSpacing: -1,
+                        letterSpacing: -1.5,
+                        // Optionnel : Une petite ombre portée pour aider la lisibilité
+                        shadows: [
+                          Shadow(
+                            color: isDark ? Colors.black54 : Colors.white54,
+                            blurRadius: 20,
+                          ),
+                        ],
                       ),
                     ),
 
                     const SizedBox(height: 40),
 
-                    // B. LA GRILLE (Limitée à 8)
+                    // GRILLE FAVORIS
                     if (favorites.isEmpty)
                       Column(
                         children: [
                           Icon(
                             Icons.star_outline_rounded,
                             size: 40,
-                            color: AppTheme.greyText.withOpacity(0.3),
+                            color: AppTheme.greyText.withOpacity(0.8),
                           ),
                           const SizedBox(height: 10),
                           Text(
                             "Vos favoris apparaîtront ici",
                             style: TextStyle(
-                              color: AppTheme.greyText.withOpacity(0.5),
+                              color: textColor.withOpacity(
+                                0.7,
+                              ), // Texte un peu plus contrasté
                               fontSize: 14,
                             ),
                           ),

@@ -81,7 +81,8 @@ dev_dependencies:
 flutter:
   assets:
     - .env
-    - assets/
+    - assets/images/dark-gradient-background.png
+    - assets/images/light-gradient-background.png
 
   # The following line ensures that the Material Icons font is
   # included with your application, so that you can use the icons in
